@@ -13,12 +13,12 @@ extension Sequence where Self.Iterator.Element == Path {
         var iterator = self.makeIterator()
   
         var current = iterator.next()
+        var common = current
         while current != nil {
-            if let next = iterator.next() {
-                current = current?.commonAncestor(next)
-            }
+            common = common?.commonAncestor(current!)
+            current = iterator.next()
         }
-        return nil
+        return common
     }
 
 }
@@ -109,8 +109,8 @@ func dSym(for uuid: String) -> Path?  {
 // MARK : Foundation
 extension URL {
     /*static func + (url: URL, pathComponent: String) -> URL {
-        return url.appendingPathComponent(pathComponent)
-    }*/
+     return url.appendingPathComponent(pathComponent)
+     }*/
     static func > (url: URL, pathComponent: String) -> URL {
         return url.appendingPathComponent(pathComponent, isDirectory: false)
     }
@@ -162,6 +162,7 @@ public extension ArgumentRaw where RawValue == String {
 
 enum Platform: String, ArgumentRaw {
     case macOS, iOS, tvOS
+    static let all: [Platform] = [.iOS, .macOS, .tvOS]
 }
 
 extension Path: ArgumentRaw {}
@@ -169,19 +170,24 @@ extension URL: ArgumentRaw {}
 
 
 // MARK: Command
-let cmd = command { (path: String, platform: Platform, outputPath: Path, url: URL) in
+let cmd = command (
+    Argument<Path>("path", description: "Path of your project"),
+    Argument<Platform>("platform", description: "Platform. One of " + Platform.all.map { $0.rawValue }.joined(separator: ", ") ),
+    Argument<Path>("output", description: "Output folder"),
+    Argument<URL>("url", description: "URL used for JSON output"),
+    Flag("verbose"),
+    Flag("quiet")
+) { (path, platform, outputPath, url, quiet, verbose) in
     
-    if CommandLine.arguments.count < 4 {
-        print("usage <project path> <platform> <output path> <base url>")
-        exit(1)
-    }
-
-    let root = Path(path)
+    let root = path
     if !root.isReadable {
         print("Unable to read \(root)")
         exit(EXIT_FAILURE)
     }
 
+    if !outputPath.exists {
+        try? outputPath.createDirectory(withIntermediateDirectories: true)
+    }
     if !outputPath.isWritable {
         print("Output path \(outputPath) is not writtable")
         exit(EXIT_FAILURE)
@@ -227,12 +233,12 @@ let cmd = command { (path: String, platform: Platform, outputPath: Path, url: UR
         }
     }
     
-    var licenseFileNames = ["License.md", "LICENSE", "LICENSE.md", "LICENSE.txt"] // could do better by browsing files
-    
     // Do a job for each build
     for build in builds {
         let projectName = build.projectName
-        print("\(projectName)... ", terminator: "")
+        if !quiet {
+            print("\(projectName)... ", terminator: "")
+        }
         let projectPath = platformPath + "\(projectName).framework"
         let projectDSYMPath = platformPath + "\(projectName).framework.dSYM"
         
@@ -293,33 +299,41 @@ let cmd = command { (path: String, platform: Platform, outputPath: Path, url: UR
         }
         
         let zipResult = zipCmd(zipFile, files)
-        if !zipResult.stdout.isEmpty {
-            print(zipResult.stdout)
-        }
-        if !zipResult.stderror.isEmpty {
-            print(zipResult.stderror)
+        if verbose {
+            if !zipResult.stdout.isEmpty {
+                print(zipResult.stdout)
+            }
+            if !zipResult.stderror.isEmpty {
+                print(zipResult.stderror)
+            }
         }
         
-        print(zipFile.rawValue)
-        
+        if !quiet {
+            print(zipFile.rawValue)
+        }
         // Create or update a json file for binary access
-        let jsonPath = outputPath + "\(projectName).json"
+        let jsonPath = outputPath + build.type + "\(projectName).json"
         
         let textFile = TextFile(path: jsonPath)
         if !jsonPath.exists {
-            try? textFile.write("{}")
+            try? textFile.write("{}") // touch json file
         }
         let dataFile = DataFile(path: jsonPath)
+        // read
         if let data = try? dataFile.read() {
             var json = JSON(data: data)
+            // updqte
             let urlProject: URL = url + build.type + projectName + platform.rawValue + build.version > "\(build.projectName).zip"
             json[build.version].url = urlProject
-            
+            // and write
             if let newData = try? json.rawData(options: [.prettyPrinted]) {
                 try? dataFile.write(newData)
             }
         }
-        print(try! textFile.read())
+        
+        if !quiet {
+            print(try! textFile.read())
+        }
     }
 }
 
