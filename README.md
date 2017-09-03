@@ -7,8 +7,8 @@ Command line utility to create zip archives of frameworks produced by the depend
 
 📙 - tanit parse your `Cartfile.resolved` file, create one zip and one json file for each frameworks
 
-    - the zip contains the framework, the license file and symbole files
-    - the json follow the format defined by [Carthage/binary-project-specification](https://github.com/Carthage/Carthage/blob/master/Documentation/Artifacts.md#example-binary-project-specification), to define the zip path for the current framework version
+   - the zip contains the framework, the license file and symbole files
+   - the json follow the format defined by [Carthage/binary-project-specification](https://github.com/Carthage/Carthage/blob/master/Documentation/Artifacts.md#example-binary-project-specification), to define the zip path for the current framework version
 
 
 ## 💻  Install
